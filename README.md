@@ -7,7 +7,7 @@ This repository implements the dependency parser described in the paper [Learn f
 
 ## Usage (by examples)
 ### Data
-Orignal data comes from [TOEW](https://github.com/NJUNLP/TOWE/tree/master/data).
+Orignal data comes from [TOWE](https://github.com/NJUNLP/TOWE/tree/master/data).
 
 ### Train
 We use embedding bert-cased by [bert-base-cased](https://huggingface.co/bert-base-cased) (768d)
