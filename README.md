@@ -3,6 +3,7 @@ This repository implements the dependency parser described in the paper [Learn f
 ## Prerequisite
 * [pytorch Library](https://pytorch.org/)
 * [transformers](https://huggingface.co/transformers/model_doc/bert.html)
+* [corenlp](https://stanfordnlp.github.io/CoreNLP/)
 
 ## Usage (by examples)
 ### Train
