@@ -1,0 +1,1 @@
+{"terms": {"Asp": {"short": "Asp", "verbose": "Aspect"}, "Opi": {"short": "Opi", "verbose": "Opinion"}}, "relations": {"Pair": {"short": "Pair", "verbose": "Pair", "symmetric": true}}}
