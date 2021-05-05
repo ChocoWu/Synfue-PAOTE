@@ -1,8 +1,8 @@
-# Synfue-PAOTE
+# Syntax fusion Encoder for the PAOTE task (Synfue)
 This repository implements the dependency parser described in the paper [Learn from Syntax: Improving Pair-wise Aspect and Opinion Terms Extraction with Rich Syntactic Knowledge]()
 ## Prerequisite
-[pytorch Library](https://pytorch.org/)
-[transformers](https://huggingface.co/transformers/model_doc/bert.html)
+* [pytorch Library](https://pytorch.org/)
+* [transformers](https://huggingface.co/transformers/model_doc/bert.html)
 
 ## Usage (by examples)
 ### Train
