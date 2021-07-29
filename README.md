@@ -15,6 +15,8 @@ We need to obtain the dependency sturcture and POS tags for each data, and save 
 Pay attention to the file path and modify as needed
 
 #### Get Dependency and POS
+To parse the dependency structure and POS tags, we employ the [CoreNLP](https://stanfordnlp.github.io/CoreNLP/) provided by stanfordnlp.
+So please download relavant files first.
 ```
   cd data/datasets/orignal 
   python preprocess.py
