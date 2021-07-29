@@ -1,7 +1,8 @@
 
 import pickle
-from collections import Counter
 import os
+from collections import Counter
+
 
 class Vocab(object):
     PAD = '*PAD*'
@@ -186,6 +187,7 @@ class Vocab(object):
         singleton_max_count_str = 'singleton_max_count\t' + str(self.singleton_max_count) + '\n'
         return spec_tok_size_str + tok_size_str + singleton_size_str + singleton_max_count_str
 
+
     def save(self, file_path, format='text'):
         '''
 
@@ -193,8 +195,7 @@ class Vocab(object):
         :return:
         '''
         if not os.path.exists(os.path.dirname(file_path)):
-            os.makedirs(os.path.dirname(file_path))
-
+            os.mkdir(os.path.dirname(file_path))
         if format == 'pickle':
             with open(file_path, 'wb', encoding='utf-8') as file:
                 pickle.dump(self, file)
@@ -231,7 +232,7 @@ class Vocab(object):
                 vocab.singleton_size = singleton_size
                 vocab.singleton_max_count = singleton_max_count
 
-                offset = 4  # skip head information
+                offset = 4 # skip head information
                 for i in range(offset, offset + tok_size + spec_tok_size):
                     line_arr = lines[i].strip().split('\t')
                     idx, tok, count = int(line_arr[0]), line_arr[1], int(line_arr[2])

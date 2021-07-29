@@ -29,7 +29,7 @@ def collapse_role_type(role_type):
     return role_type
 
 
-def normalize_tok(tok, lower=False, normalize_digits=False):
+def normalize_tok(tok, lower=True, normalize_digits=True):
 
     if lower:
         tok = tok.lower()

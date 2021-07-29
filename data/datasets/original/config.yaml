@@ -1,16 +1,16 @@
 data_dir: ''
 cur_dataset_dir: ''
 
-vocab_dir: 'vocab/'
+vocab_dir: '../../../data/vocab'
 token_vocab_file: 'token_vocab.txt'
 char_vocab_file: 'char_vocab.txt'
 pos_vocab_file: 'pos_vocab.txt'
 dep_type_vocab_file: 'dep_type_vocab.txt'
 
-pickle_dir: '../pickle/14lap'
-vec_npy: '../pickle/14lap/word_vec.npy'
-inst_pl_file: '../pickle/14lap/data.pl'
-model_save_file: '../pickle/14lap/model.ckpt'
+pickle_dir: '../../../data/pickle/14lap'
+vec_npy: '../../../data/pickle/14lap/word_vec.npy'
+inst_pl_file: '../../../data/pickle/14lap/data.pl'
+model_save_file: '../../../data/pickle/14lap/model.ckpt'
 
 lap_14: './14lap'
 res_14: './14res'

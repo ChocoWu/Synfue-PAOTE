@@ -10,6 +10,7 @@ from collections import Counter
 from nltk.parse import CoreNLPDependencyParser
 import numpy as np
 import argparse
+from tqdm import tqdm
 
 from io_utils import read_yaml, save_pickle, read_pickle
 from str_utils import normalize_tok
@@ -23,6 +24,7 @@ parser.add_argument('--seed', '-s', required=False, type=int, default=config['ra
 args = parser.parse_args()
 config['random_seed'] = args.seed
 print('seed:', config['random_seed'])
+print('the current file path:', os.getcwd())
 
 np.random.seed(config['random_seed'])
 
@@ -54,7 +56,7 @@ res_16_test_txt = os.path.join(config['res_16'], 'test.tsv')
 POLARITY_DICT = {'NEU': 0, 'POS': 1, 'NEG': 2}
 POLARITY_DICT_REV = {v: k for k, v in POLARITY_DICT.items()}
 
-depparser = CoreNLPDependencyParser(url='http://localhost:9000')
+depparser = CoreNLPDependencyParser(url='http://172.28.6.42:9000')
 
 
 def load_data(txt_path, pair_path):
@@ -109,12 +111,17 @@ def build_vocab(train_list, dev_list, test_list, data_type='lap14'):
     opinions_list = []
     pos_list = []
     dep_list = []
-    for inst in train_list:
+    for inst in tqdm(train_list, total=len(train_list)):
         words = inst['words']
         aspects = inst['aspects_idx']  # idx, prds_type
         opinions = inst['opinions_idx']  # arg_id, prd_id, role
 
-        temp_parser_res = depparser.parse([normalize_tok(w) for w in words])
+        try:
+            temp_parser_res = depparser.parse([normalize_tok(w) for w in words])
+        except:
+            print(words)
+            print([normalize_tok(w) for w in words])
+            exit(0)
         parser_res = []
         for i in temp_parser_res:
             temp = i.to_conll(4).strip().split('\n')
@@ -132,7 +139,7 @@ def build_vocab(train_list, dev_list, test_list, data_type='lap14'):
         aspects_list.extend(aspects)
         opinions_list.extend(opinions)
 
-    for inst in dev_list:
+    for inst in tqdm(dev_list, total=len(dev_list)):
         words = inst['words']
         aspects = inst['aspects_idx']  # idx, prds_type
         opinions = inst['opinions_idx']  # arg_id, prd_id, role
@@ -154,7 +161,7 @@ def build_vocab(train_list, dev_list, test_list, data_type='lap14'):
         aspects_list.extend(aspects)
         opinions_list.extend(opinions)
 
-    for inst in test_list:
+    for inst in tqdm(test_list, total=len(test_list)):
         words = inst['words']
         aspects = inst['aspects_idx']  # idx, prds_type
         opinions = inst['opinions_idx']  # arg_id, prd_id, role
@@ -200,14 +207,14 @@ def build_vocab(train_list, dev_list, test_list, data_type='lap14'):
 
     print('--------pos_vocab---------------')
     pos_vocab = Vocab()
-    pos_vocab.add_spec_toks(pad_tok=False, unk_tok=False)
+    pos_vocab.add_spec_toks(pad_tok=True, unk_tok=True)
     pos_vocab.add_counter(Counter(pos_list))
     pos_vocab.save(pos_vocab_file)
     print(pos_vocab)
 
     print('--------dep_vocab---------------')
     dep_vocab = Vocab()
-    dep_vocab.add_spec_toks(pad_tok=False, unk_tok=False)
+    dep_vocab.add_spec_toks(pad_tok=True, unk_tok=True)
     dep_vocab.add_counter(Counter(dep_list))
     dep_vocab.save(dep_type_vocab_file)
     print(dep_vocab)
@@ -216,7 +223,7 @@ def build_vocab(train_list, dev_list, test_list, data_type='lap14'):
 def construct_instance(inst_list, token_vocab, char_vocab, pos_vocab, dep_vocab, is_train=True):
     word_num = 0
     processed_inst_list = []
-    for inst in inst_list:
+    for inst in tqdm(inst_list, total=len(inst_list)):
 
         words = inst['words']
         aspects = inst['aspects_idx']
@@ -249,8 +256,8 @@ def construct_instance(inst_list, token_vocab, char_vocab, pos_vocab, dep_vocab,
         if len(parser_res) > len(inst['words']):
             words = [a[0] for a in parser_res]
             inst['words'] = words
-            print("source text: ", inst['words'])
-            print("new text: ", words)
+            # print("source text: ", inst['words'])
+            # print("new text: ", words)
             s_to_t = {}
             i = j = 0
             while i < len(inst['words']):
@@ -434,36 +441,36 @@ if __name__ == '__main__':
     pickle_data(lap_14_train, lap_14_dev, lap_14_test, 'lap14')
     print('pickle lap-14 data done.')
 
-    res_14_train = load_data_towe(res_14_train_txt)
-    res_14_train, res_14_dev = train_test_split(res_14_train, test_size=0.2, shuffle=True)
-    res_14_test = load_data_towe(res_14_test_txt)
-    build_vocab(res_14_train, res_14_dev, res_14_test, 'res14')
-    print('build res-14 vocab done.')
-    pickle_data(res_14_train, res_14_dev, res_14_test, 'res14')
-    print('pickle res-14 data done.')
+    # res_14_train = load_data_towe(res_14_train_txt)
+    # res_14_train, res_14_dev = train_test_split(res_14_train, test_size=0.2, shuffle=True)
+    # res_14_test = load_data_towe(res_14_test_txt)
+    # build_vocab(res_14_train, res_14_dev, res_14_test, 'res14')
+    # print('build res-14 vocab done.')
+    # pickle_data(res_14_train, res_14_dev, res_14_test, 'res14')
+    # print('pickle res-14 data done.')
+    #
+    # res_15_train = load_data_towe(res_15_train_txt)
+    # res_15_train, res_15_dev = train_test_split(res_15_train, test_size=0.2, shuffle=True)
+    # res_15_test = load_data_towe(res_15_test_txt)
+    # build_vocab(res_15_train, res_15_dev, res_15_test, 'res15')
+    # print('build res-15 vocab done.')
+    # pickle_data(res_15_train, res_15_dev, res_15_test, 'res15')
+    # print('pickle res-15 data done.')
+    #
+    # res_16_train = load_data_towe(res_16_train_txt)
+    # res_16_train, res_16_dev = train_test_split(res_16_train, test_size=0.2, shuffle=True)
+    # res_16_test = load_data_towe(res_16_test_txt)
+    # build_vocab(res_16_train, res_16_dev, res_16_test, 'res16')
+    # print('build res-16 vocab done.')
+    # pickle_data(res_16_train, res_16_dev, res_16_test, 'res16')
+    # print('pickle res-16 data done.')
 
-    res_15_train = load_data_towe(res_15_train_txt)
-    res_15_train, res_15_dev = train_test_split(res_15_train, test_size=0.2, shuffle=True)
-    res_15_test = load_data_towe(res_15_test_txt)
-    build_vocab(res_15_train, res_15_dev, res_15_test, 'res15')
-    print('build res-15 vocab done.')
-    pickle_data(res_15_train, res_15_dev, res_15_test, 'res15')
-    print('pickle res-15 data done.')
-
-    res_16_train = load_data_towe(res_16_train_txt)
-    res_16_train, res_16_dev = train_test_split(res_16_train, test_size=0.2, shuffle=True)
-    res_16_test = load_data_towe(res_16_test_txt)
-    build_vocab(res_16_train, res_16_dev, res_16_test, 'res16')
-    print('build res-16 vocab done.')
-    pickle_data(res_16_train, res_16_dev, res_16_test, 'res16')
-    print('pickle res-16 data done.')
-
-    print(
-        '14_lap: {}, 14_res: {}, 15_res: {}, 16_res: {}'.format(len(lap_14_train), len(res_14_train), len(res_15_train),
-                                                                len(res_16_train)))
-    print(
-        '14_lap: {}, 14_res: {}, 15_res: {}, 16_res: {}'.format(len(lap_14_dev), len(res_14_dev), len(res_15_dev),
-                                                                len(res_16_dev)))
-    print(
-        '14_lap: {}, 14_res: {}, 15_res: {}, 16_res: {}'.format(len(lap_14_test), len(res_14_test), len(res_15_test),
-                                                                len(res_16_test)))
+    # print(
+    #     '14_lap: {}, 14_res: {}, 15_res: {}, 16_res: {}'.format(len(lap_14_train), len(res_14_train), len(res_15_train),
+    #                                                             len(res_16_train)))
+    # print(
+    #     '14_lap: {}, 14_res: {}, 15_res: {}, 16_res: {}'.format(len(lap_14_dev), len(res_14_dev), len(res_15_dev),
+    #                                                             len(res_16_dev)))
+    # print(
+    #     '14_lap: {}, 14_res: {}, 15_res: {}, 16_res: {}'.format(len(lap_14_test), len(res_14_test), len(res_15_test),
+    #                                                             len(res_16_test)))
