@@ -123,7 +123,7 @@ def construct_instance(inst_list):
 
 
 def load_data(source_file, target_dir):
-    train_list, dev_list, test_list, token_vocab, char_vocab, _, _, _ = read_pickle(source_file)
+    train_list, dev_list, test_list, token_vocab, char_vocab, _, _ = read_pickle(source_file)
     train_path = os.path.join(target_dir, 'train.json')
     dev_path = os.path.join(target_dir, 'dev.json')
     test_path = os.path.join(target_dir, 'test.json')
@@ -154,20 +154,21 @@ def remove_repeat(terms):
 
 
 if __name__ == '__main__':
-    x = '../pickle/14lap/data.pl'
-    t_dir = './towe/14lap/'
+    print('the current file path: ', os.getcwd())
+    x = '../../pickle/14lap/data.pl'
+    t_dir = './14lap/'
     load_data(x, t_dir)
 
-    x = '../pickle/14res/data.pl'
-    t_dir = './towe/14res/'
-    load_data(x, t_dir)
-
-    x = '../pickle/15res/data.pl'
-    t_dir = './towe/15res/'
-    load_data(x, t_dir)
-
-    x = '../pickle/16res/data.pl'
-    t_dir = './16res/'
-    load_data(x, t_dir)
+    # x = '../../pickle/14res/data.pl'
+    # t_dir = './towe/14res/'
+    # load_data(x, t_dir)
+    #
+    # x = '../../pickle/15res/data.pl'
+    # t_dir = './towe/15res/'
+    # load_data(x, t_dir)
+    #
+    # x = '../../pickle/16res/data.pl'
+    # t_dir = './16res/'
+    # load_data(x, t_dir)
 
     
