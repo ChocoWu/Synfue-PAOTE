@@ -148,7 +148,7 @@ class JsonInputReader(BaseInputReader):
     def _parse_document(self, doc, dataset) -> Document:
         jtokens = doc['tokens']
         jrelations = doc['relations']
-        jterms = doc['terms']
+        jterms = doc['entities']
         jdep_label = doc['dep_label']
         jdep_label_indices = doc['dep_label_indices']
         jdep = doc['dep']
