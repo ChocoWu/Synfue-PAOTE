@@ -56,7 +56,7 @@ res_16_test_txt = os.path.join(config['res_16'], 'test.tsv')
 POLARITY_DICT = {'NEU': 0, 'POS': 1, 'NEG': 2}
 POLARITY_DICT_REV = {v: k for k, v in POLARITY_DICT.items()}
 
-depparser = CoreNLPDependencyParser(url='http://172.28.6.42:9000')
+depparser = CoreNLPDependencyParser(url='http://localhost:9000')
 
 
 def load_data(txt_path, pair_path):
