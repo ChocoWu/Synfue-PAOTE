@@ -41,3 +41,6 @@ We use embedding bert-cased by [bert-base-cased](https://huggingface.co/bert-bas
 ```
   python Synfue.py test --config configs/16res_test.conf
 ```
+
+## Note
+this code refers to the [SpERT](https://github.com/lavis-nlp/spert)
