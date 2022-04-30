@@ -35,11 +35,11 @@ If you want to use other datasets to train the model, please refer to the above 
 We use embedding bert-cased by [bert-base-cased](https://huggingface.co/bert-base-cased) (768d)
 
 ```
-  python Synfue.py train --config configs/16res_train.conf
+  python synfue.py train --config configs/16res_train.conf
 ```
 ### Test
 ```
-  python Synfue.py test --config configs/16res_test.conf
+  python synfue.py test --config configs/16res_test.conf
 ```
 
 ## Note
