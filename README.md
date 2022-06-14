@@ -21,15 +21,14 @@ We use the NLTK package to obtain the dependency and POS parsing, so we need to 
 ```
 depparser = CoreNLPDependencyParser(url='http://127.0.0.1:9000')
 ```
-The url is set based on the real senerois.
+The url is set according to the real scenario.
 
 #### Save
 ```
   python preprocess.py
 ```
-
+The proposed data will be sotored in the dicretory `data/datasets/towe/`.
 We also provide some preprocessed examples. 
-If you want to use other datasets to train the model, please refer to the above steps.
 
 ### Train
 We use embedding bert-cased by [bert-base-cased](https://huggingface.co/bert-base-cased) (768d)
