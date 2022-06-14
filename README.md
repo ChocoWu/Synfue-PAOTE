@@ -11,7 +11,6 @@ This repository implements the dependency parser described in the paper [Learn f
 * gensim (4.0.1)
 * pandas (1.2.4)
 * scikit-learn (0.24.1)
-* 
 
 ## Usage (by examples)
 ### Data
