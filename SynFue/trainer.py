@@ -20,6 +20,8 @@ from SynFue.loss import SynFueLoss, Loss
 from tqdm import tqdm
 from SynFue.base_trainer import BaseTrainer
 
+from torchsummary import summary
+
 SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
 
 
@@ -70,6 +72,10 @@ class SynFueTrainer(BaseTrainer):
         # create model
         model_class = models.get_model(self.args.model_type)
 
+        # print('Training:')
+        # print('model_path: ', self.args.model_path)
+        # print('cache_path: ', self.args.cache_path)
+
         # load model
         config = BertConfig.from_pretrained(self.args.model_path, cache_dir=self.args.cache_path)
         util.check_version(config, model_class, self.args.model_path)
@@ -90,7 +96,7 @@ class SynFueTrainer(BaseTrainer):
                                             sigma=self.args.sigma)
 
         model.to(self._device)
-
+        # summary(model)
         # create optimizer
         optimizer_params = self._get_optimizer_params(model)
         optimizer = AdamW(optimizer_params, lr=args.lr, weight_decay=args.weight_decay, correct_bias=False)
@@ -112,7 +118,7 @@ class SynFueTrainer(BaseTrainer):
         for epoch in range(args.epochs):
             # train epoch
             self._train_epoch(model, compute_loss, optimizer, train_dataset, updates_epoch, epoch)
-
+            # rel_nec_eval = self._eval(model, validation_dataset, input_reader, epoch + 1, updates_epoch)
             # eval validation sets
             if not args.final_eval or (epoch == args.epochs - 1):
                 rel_nec_eval = self._eval(model, validation_dataset, input_reader, epoch + 1, updates_epoch)
@@ -148,7 +154,12 @@ class SynFueTrainer(BaseTrainer):
         # create model
         model_class = models.get_model(self.args.model_type)
 
+        # print('Eval:')
+        # print('model_path: ', self.args.model_path)
+        # print('cache_path: ', self.args.cache_path)
+
         config = BertConfig.from_pretrained(self.args.model_path, cache_dir=self.args.cache_path)
+
         util.check_version(config, model_class, self.args.model_path)
 
         model = model_class.from_pretrained(self.args.model_path,
@@ -164,9 +175,10 @@ class SynFueTrainer(BaseTrainer):
                                             beta=self.args.beta,
                                             alpha=self.args.alpha,
                                             sigma=self.args.sigma)
+        # model = torch.load(os.path.join(self.args.model_path, 'pytorch_model.bin'))
 
         model.to(self._device)
-
+        # summary(model)
         # evaluate
         self._eval(model, input_reader.get_dataset(dataset_label), input_reader)
 
@@ -192,12 +204,13 @@ class SynFueTrainer(BaseTrainer):
 
             # forward step
             term_logits, rel_logits = model(encodings=batch['encodings'], context_masks=batch['context_masks'],
-                                              term_masks=batch['term_masks'], term_sizes=batch['term_sizes'],
-                                              term_spans=batch['term_spans'], term_types=batch['term_types'],
-                                              relations=batch['rels'], rel_masks=batch['rel_masks'],
-                                              simple_graph=batch['simple_graph'], graph=batch['graph'],
-                                              relations3=batch['rels3'], rel_masks3=batch['rel_masks3'],
-                                              pair_mask=batch['pair_mask'], pos=batch['pos'])
+                                            term_masks=batch['term_masks'], term_sizes=batch['term_sizes'],
+                                            term_spans=batch['term_spans'], term_types=batch['term_types'],
+                                            relations=batch['rels'], rel_masks=batch['rel_masks'],
+                                            simple_graph=batch['simple_graph'], graph=batch['graph'],
+                                            relations3=batch['rels3'], rel_masks3=batch['rel_masks3'],
+                                            pair_mask=batch['pair_mask'], pos=batch['pos'],
+                                            pieces2word=batch['pieces2word'])
 
             # compute loss and optimize parameters
             batch_loss = compute_loss.compute(term_logits=term_logits, rel_logits=rel_logits,
@@ -246,7 +259,7 @@ class SynFueTrainer(BaseTrainer):
                                term_masks=batch['term_masks'], term_sizes=batch['term_sizes'],
                                term_spans=batch['term_spans'], term_sample_masks=batch['term_sample_masks'],
                                evaluate=True, simple_graph=batch['simple_graph'], graph=batch['graph'],
-                               pos=batch['pos'])  # pos=batch['pos']
+                               pos=batch['pos'], pieces2word=batch['pieces2word'])  # pos=batch['pos']
                 term_clf, rel_clf, rels = result
 
                 # evaluate batch

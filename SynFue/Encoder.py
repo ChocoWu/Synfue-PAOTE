@@ -79,29 +79,37 @@ class nLaGCN(nn.Module):
 
 
 class SynFueEncoder(nn.Module):
-    def __init__(self, bert, opt):
+    def __init__(self, opt):
         super(SynFueEncoder, self).__init__()
         self.opt = opt
-        self.bert = bert
         self.lagcn = nLaGCN(opt)
 
         self.fc = nn.Linear(opt.bert_dim*2 + opt.pos_dim, opt.bert_dim*2)
-        self.bert_dropout = nn.Dropout(opt.bert_dropout)
         self.output_dropout = nn.Dropout(opt.output_dropout)
 
         self.pod_embedding = nn.Embedding(opt.pos_num, opt.pos_dim, padding_idx=0)
 
-    def forward(self, input_ids, input_masks, simple_graph, graph, pos=None, output_attention=False):
+    def forward(self, word_reps, simple_graph, graph, pos=None, output_attention=False):
+        """
+
+        :param word_reps: [B, L, H]
+        :param simple_graph: [B, L, L]
+        :param graph: [B, L, L]
+        :param pos: [B, L]
+        :param output_attention: bool
+        :return:
+            output: [B, L, H]
+            dep_reps: [B, L, H]
+            cls_reps: [B, H]
+        """
 
         pos_embed = self.pod_embedding(pos)
-        sequence_output, pooled_output = self.bert(input_ids)
-        x = self.bert_dropout(sequence_output)
 
-        lagcn_output = self.lagcn(x, simple_graph, graph, pos_embed, output_attention)
+        lagcn_output = self.lagcn(word_reps, simple_graph, graph, pos_embed, output_attention)
 
-        pos_output = self.local_attn(x, pos_embed, self.opt.num_layer, self.opt.w_size)
+        pos_output = self.local_attn(word_reps, pos_embed, self.opt.num_layer, self.opt.w_size)
 
-        output = torch.cat((lagcn_output[0], pos_output, sequence_output), dim=-1)
+        output = torch.cat((lagcn_output[0], pos_output, word_reps), dim=-1)
         output = self.fc(output)
         output = self.output_dropout(output)
         return output, lagcn_output[1]

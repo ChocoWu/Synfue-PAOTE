@@ -81,13 +81,16 @@ class TermType:
 
 
 class Token:
-    def __init__(self, tid: int, index: int, span_start: int, span_end: int, phrase: str):
+    def __init__(self, tid: int, index: int, span_start: int, span_end: int, phrase: str,
+                 sub_token_start: int, sub_token_end: int):
         self._tid = tid  # ID within the corresponding dataset
         self._index = index  # original token index in document
 
-        self._span_start = span_start  # start of token span in document (inclusive)
-        self._span_end = span_end  # end of token span in document (exclusive)
+        self._span_start = span_start  # start of token in document (inclusive)
+        self._span_end = span_end  # end of token in document (exclusive)
         self._phrase = phrase
+        self._sub_token_start = sub_token_start  # start of sub word in a document after a WordPiece Tokenizer
+        self._sub_token_end = sub_token_end  # end of sub word in a document after a WordPiece Tokenizer
 
     @property
     def index(self):
@@ -104,6 +107,18 @@ class Token:
     @property
     def span(self):
         return self._span_start, self._span_end
+
+    @property
+    def sub_token_start(self):
+        return self._sub_token_start
+
+    @property
+    def sub_token_end(self):
+        return self._sub_token_end
+
+    @property
+    def sub_token(self):
+        return self._sub_token_start, self._sub_token_end
 
     @property
     def phrase(self):
@@ -139,6 +154,18 @@ class TokenSpan:
     @property
     def span(self):
         return self.span_start, self.span_end
+
+    @property
+    def sub_token_start(self):
+        return self._tokens[0].sub_token_start
+
+    @property
+    def sub_token_end(self):
+        return self._tokens[0].sub_token_end
+
+    @property
+    def sub_token(self):
+        return self.sub_token_start, self.sub_token_end
 
     def __getitem__(self, s):
         if isinstance(s, slice):
@@ -189,6 +216,19 @@ class Term:
     @property
     def span(self):
         return self.span_start, self.span_end
+
+    @property
+    def sub_token_start(self):
+        return self._tokens[0].sub_token_start
+
+    @property
+    def sub_token_end(self):
+        return self._tokens[-1].sub_token_end
+
+    @property
+    def sub_token(self):
+        return self.sub_token_start, self.sub_token_end
+    
 
     @property
     def phrase(self):
@@ -393,8 +433,8 @@ class Dataset(TorchDataset):
     def iterate_relations(self, batch_size, order=None, truncate=False):
         return BatchIterator(self.relations, batch_size, order=order, truncate=truncate)
 
-    def create_token(self, idx, span_start, span_end, phrase) -> Token:
-        token = Token(self._tid, idx, span_start, span_end, phrase)
+    def create_token(self, idx, span_start, span_end, phrase, sub_token_start, sub_token_end) -> Token:
+        token = Token(self._tid, idx, span_start, span_end, phrase, sub_token_start, sub_token_end)
         self._tid += 1
         return token
 

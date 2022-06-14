@@ -46,7 +46,7 @@ def get_head_tail_rep(h, head_tail_index):
 class SynFueBERT(BertPreTrainedModel):
     """ Span-based model to jointly extract terms and relations """
 
-    VERSION = '1.1'
+    VERSION = '1.2'
 
     def __init__(self, config: BertConfig, cls_token: int, relation_types: int, term_types: int,
                  size_embedding: int, prop_drop: float, freeze_transformer: bool, args, max_pairs: int = 100,
@@ -55,13 +55,15 @@ class SynFueBERT(BertPreTrainedModel):
 
         # BERT model
         self.bert = BertModel(config)
-        self.SynFue = Encoder.SynFueEncoder(self.bert, opt=args)
+        self.bert_dropout = nn.Dropout(args.bert_dropout)
+        self.SynFue = Encoder.SynFueEncoder(opt=args)
         self.cc = cross_attn.CA_module(config.hidden_size, config.hidden_size, 1, dropout=1.0)
 
         # layers
-        self.rel_classifier = nn.Linear(config.hidden_size * 6 + size_embedding * 2, relation_types)
-        self.rel_classifier3 = nn.Linear(config.hidden_size * 6 + size_embedding * 3, relation_types)
-        self.term_classifier = nn.Linear(config.hidden_size * 8 + size_embedding, term_types)
+        self.rel_classifier = nn.Linear(config.hidden_size * 4 + size_embedding * 2, relation_types)
+        self.rel_classifier3 = nn.Linear(config.hidden_size * 3 + size_embedding * 3, relation_types)
+        self.term_linear = nn.Linear(config.hidden_size * 7 + size_embedding, config.hidden_size)
+        self.term_classifier = nn.Linear(config.hidden_size, term_types)
         self.dep_linear = nn.Linear(config.hidden_size, relation_types)
         self.size_embeddings = nn.Embedding(100, size_embedding)
         self.dropout = nn.Dropout(prop_drop)
@@ -84,40 +86,74 @@ class SynFueBERT(BertPreTrainedModel):
             for param in self.bert.parameters():
                 param.requires_grad = False
 
+    # def init_weights(self):
+    #     for name, param in self.SynFue.named_parameters():
+    #         if name.find('weight') != -1:
+    #             torch.nn.init.normal_(param, 0, 1)
+    #         elif name.find('bias') != -1:
+    #             torch.nn.init.constant_(param, 0)
+    #         else:
+    #             torch.nn.init.xavier_normal_(param)
+    #     for name, param in self.cc.named_parameters():
+    #         if name.find('weight') != -1:
+    #             torch.nn.init.normal_(param, 0, 1)
+    #         elif name.find('bias') != -1:
+    #             torch.nn.init.constant_(param, 0)
+    #         else:
+    #             torch.nn.init.xavier_normal_(param)
+
     def _forward_train(self, encodings: torch.tensor, context_masks: torch.tensor, term_masks: torch.tensor,
-                       term_sizes: torch.tensor,  term_spans: torch.tensor, term_types: torch.tensor,
+                       term_sizes: torch.tensor, term_spans: torch.tensor, term_types: torch.tensor,
                        relations: torch.tensor, rel_masks: torch.tensor,
                        simple_graph: torch.tensor, graph: torch.tensor,
                        relations3: torch.tensor, rel_masks3: torch.tensor, pair_mask: torch.tensor,
-                       pos: torch.tensor = None):
-        # get contextualized token embeddings from last transformer layer
-        context_masks = context_masks.float()
+                       pos: torch.tensor = None, pieces2word: torch.tensor = None):
+        """
 
-        h, dep_output = self.SynFue(input_ids=encodings, input_masks=context_masks, simple_graph=simple_graph,
-                                    graph=graph, pos=pos)
+        :param encodings: [B, L']
+        :param context_masks: [B, L']
+        :param term_masks: [B, max_term, L]
+        :param term_sizes: [B, max_term]
+        :param term_spans: [B, max_term, 2]
+        :param term_types: [B, max_term]
+        :param relations: [B, max_relation, 2]
+        :param rel_masks: [B, max_relation, L]
+        :param simple_graph: [B, L, L]
+        :param graph: [B, L, L]
+        :param relations3: [B, max_relation, 3]
+        :param rel_masks3:[B, max_relation, max_relation, L]
+        :param pair_mask: [B, max_relation]
+        :param pos: [B, L]
+        :param pieces2word: [B, L, L']
+        :return:
+        """
+        # get contextualized token embeddings from last transformer layer
+        word_reps, cls_output = self._bert_encoder(input_ids=encodings, pieces2word=pieces2word)
+        h, dep_output = self.SynFue(word_reps=word_reps, simple_graph=simple_graph, graph=graph, pos=pos)
 
         batch_size = encodings.shape[0]
 
         # classify terms
         size_embeddings = self.size_embeddings(term_sizes)  # embed term candidate sizes
-        term_clf, term_spans_pool = self._classify_terms(encodings, h, term_masks, size_embeddings)
+        term_clf, term_reps = self._classify_terms(h, term_masks, size_embeddings, cls_output)
 
         # classify relations
-        h_large = h.unsqueeze(1).repeat(1, max(min(relations.shape[1], self._max_pairs), 1), 1, 1)
+        h_large = h.unsqueeze(1).repeat(1, max(min(relations.shape[1], self._max_pairs), 1), 1, 1)  # B, max_rel, L, H
         rel_clf = torch.zeros([batch_size, relations.shape[1], self._relation_types]).to(
-            self.rel_classifier.weight.device)
+            self.rel_classifier.weight.device)  # B, max_rel, relation_types
 
         # get span representation
-        # dep_output = [batch size, seq_len, seq_len, feat_dim] -> [batch size, span num, span num, feat_dim]
+        # dep_output = [B, L, L, H] -> [batch size, span num, span num, feat_dim]
         span_repr, mapping_list = self.get_span_repr(term_spans, term_types, dep_output)
-        cross_attn_span = self.cc(span_repr)  # batch size, seq_len, seq_len, feat_dim
+        # apply across-attention to compute the syntax-aware inter-span representation
+        cross_attn_span = self.cc(span_repr)  # batch size, span_num, soan_num, feat_dim
 
         # obtain relation logits
         # chunk processing to reduce memory usage
         for i in range(0, relations.shape[1], self._max_pairs):
             # classify relation candidates
             chunk_rel_logits, chunk_rel_clf3, chunk_dep_score = self._classify_relations(cross_attn_span,
-                                                                                         term_spans_pool,
+                                                                                         term_reps,
                                                                                          size_embeddings,
                                                                                          relations, rel_masks,
                                                                                          h_large, i,
@@ -137,18 +173,19 @@ class SynFueBERT(BertPreTrainedModel):
 
     def _forward_eval(self, encodings: torch.tensor, context_masks: torch.tensor, term_masks: torch.tensor,
                       term_sizes: torch.tensor, term_spans: torch.tensor, term_sample_masks: torch.tensor,
-                      simple_graph: torch.tensor, graph: torch.tensor, pos: torch.tensor = None):
+                      simple_graph: torch.tensor, graph: torch.tensor, pos: torch.tensor = None,
+                      pieces2word: torch.tensor = None):
         # get contextualized token embeddings from last transformer layer
-        context_masks = context_masks.float()
-        h, dep_output = self.SynFue(input_ids=encodings, input_masks=context_masks, simple_graph=simple_graph,
-                                    graph=graph, pos=pos)
+        # context_masks = context_masks.float()
+        word_reps, cls_output = self._bert_encoder(input_ids=encodings, pieces2word=pieces2word)
+        h, dep_output = self.SynFue(word_reps=word_reps, simple_graph=simple_graph, graph=graph, pos=pos)
 
         batch_size = encodings.shape[0]
-        ctx_size = context_masks.shape[-1]
+        ctx_size = term_masks.shape[-1]
 
         # classify terms
         size_embeddings = self.size_embeddings(term_sizes)  # embed term candidate sizes
-        term_clf, term_spans_pool = self._classify_terms(encodings, h, term_masks, size_embeddings)
+        term_clf, term_reps = self._classify_terms(h, term_masks, size_embeddings, cls_output)
 
         # ignore term candidates that do not constitute an actual term for relations (based on classifier)
         relations, rel_masks, rel_sample_masks, relations3, rel_masks3, \
@@ -170,7 +207,7 @@ class SynFueBERT(BertPreTrainedModel):
         for i in range(0, relations.shape[1], self._max_pairs):
             # classify relation candidates
             chunk_rel_logits, chunk_rel_clf3, chunk_dep_score = self._classify_relations(cross_attn_span,
-                                                                                         term_spans_pool,
+                                                                                         term_reps,
                                                                                          size_embeddings,
                                                                                          relations, rel_masks,
                                                                                          h_large, i,
@@ -193,14 +230,29 @@ class SynFueBERT(BertPreTrainedModel):
 
         return term_clf, rel_clf, relations
 
-    def _classify_terms(self, encodings, h, term_masks, size_embeddings):
+    def _classify_terms(self, h, term_masks, size_embeddings, cls_output):
+        """
+
+        :param h: [b, L, H*2]
+        :param term_masks: [B, max_term, L]
+        :param size_embeddings: [b, max_term, size_embedding]
+        :param cls_output:  [B, H]
+        :return:
+            term_clf: [B, max_term, term_types]
+            term_spans_pool: [B, max_term, H]
+        """
         # max pool term candidate spans
-        m = (term_masks.unsqueeze(-1) == 0).float() * (-1e30)
-        term_spans_pool = m + h.unsqueeze(1).repeat(1, term_masks.shape[1], 1, 1)
-        term_spans_pool = term_spans_pool.max(dim=2)[0]
+        # m = (term_masks.unsqueeze(-1) == 0).float() * (-1e30)
+        # term_spans_pool = m + h.unsqueeze(1).repeat(1, term_masks.shape[1], 1, 1)
+        # term_spans_pool = term_spans_pool.max(dim=2)[0]
+
+        min_value = torch.min(h).item()
+        _h = h.unsqueeze(1).expand(-1, term_masks.size(1), -1, -1)
+        _h = torch.masked_fill(_h, term_masks.eq(0).unsqueeze(-1), min_value)
+        term_spans_pool, _ = torch.max(_h, dim=2)
 
         # get cls token as candidate context representation
-        term_ctx = get_token(h, encodings, self._cls_token)
+        # term_ctx = get_token(h, encodings, self._cls_token)
 
         # get head and tail token representation
         m = term_masks.to(dtype=torch.long)
@@ -212,18 +264,34 @@ class SynFueBERT(BertPreTrainedModel):
         mk = torch.cat([mk_min, mk_max], dim=-1)
         head_tail_rep = get_head_tail_rep(h, mk)  # [batch size, term_num, bert_dim*2)
 
-        # create candidate representations including context, max pooled span and size embedding
-        term_repr = torch.cat([term_ctx.unsqueeze(1).repeat(1, term_spans_pool.shape[1], 1),
-                                 term_spans_pool, size_embeddings, head_tail_rep], dim=2)
+        # create candidate representations including context, max pooled span and size embedding, head and tail
+        term_repr = torch.cat([cls_output.unsqueeze(1).repeat(1, term_spans_pool.shape[1], 1),
+                               term_spans_pool, size_embeddings, head_tail_rep], dim=2)
         term_repr = self.dropout(term_repr)
+        term_repr = self.term_linear(term_repr)
 
         # classify term candidates
         term_clf = self.term_classifier(term_repr)
 
-        return term_clf, term_spans_pool
+        return term_clf, term_repr
 
     def _classify_relations(self, spans_matrix, term_spans_repr, size_embeddings, relations, rel_masks,
                             h, chunk_start, relations3, rel_masks3, pair_mask, rel_to_span):
+        """
+
+        :param spans_matrix:  [B, max_term, max_term, H]
+        :param term_spans_repr: [B, max_term, H]
+        :param size_embeddings: [B, max_term, term_size]
+        :param relations: [B, max_rel, 2]
+        :param rel_masks: [B, max_rel, L]
+        :param h:  [B, max_rel, L, H*2]
+        :param chunk_start:
+        :param relations3: [B, max_rel, 3]
+        :param rel_masks3: [B, max_rel, max_rel, L]
+        :param pair_mask:
+        :param rel_to_span:
+        :return:
+        """
         batch_size = relations.shape[0]
         feat_dim = spans_matrix.size(-1)
 
@@ -237,12 +305,13 @@ class SynFueBERT(BertPreTrainedModel):
             for x in mapping_list:
                 if idx1 == x[0][0] and idx2 == x[0][1]:
                     return x[1][0], x[1][1]
+
         batch_dep_score = []
         for i in range(batch_size):
-            rela = relations[i]
+            _rel = relations[i]
             dep_score_list = []
             r_2_s = rel_to_span[i]
-            for r in rela:
+            for r in _rel:
                 i1, i2 = r[0].item(), r[1].item()
                 idx1, idx2 = get_span_idx(r_2_s, i1, i2)
                 try:
@@ -311,6 +380,16 @@ class SynFueBERT(BertPreTrainedModel):
         return chunk_rel_logits, chunk_rel_clf3, batch_dep_score
 
     def _filter_spans(self, term_clf, term_spans, term_sample_masks, ctx_size, token_repr):
+        """
+        according to the results of term type detection, we first filter the invalid term, i.e., only keeping aspect
+        term and opinion term, and then we construct term pairs and term triplets for the following relations detection.
+        :param term_clf: [B, max_term, term_types]
+        :param term_spans: [B, max_term, 2]
+        :param term_sample_masks:
+        :param ctx_size: L
+        :param token_repr: [B, L, H]
+        :return:
+        """
         batch_size = term_clf.shape[0]
         feat_dim = token_repr.size(-1)
         term_logits_max = term_clf.argmax(dim=-1) * term_sample_masks.long()  # get term type (including none)
@@ -367,7 +446,9 @@ class SynFueBERT(BertPreTrainedModel):
                             rel_masks3.append([sampling.create_rel_mask3(s1, s2, (0, 0), ctx_size)])
                             pair_mask.append(0)
                         rel_to_span.append([[i1, i2], [idx1, idx2]])
-                    feat = torch.max(token_repr[i, s1[0]: s1[-1] + 1, s2[0]:s2[-1] + 1, :].contiguous().view(-1, feat_dim), dim=0)[0]
+                    feat = \
+                        torch.max(token_repr[i, s1[0]: s1[-1] + 1, s2[0]:s2[-1] + 1, :].contiguous().view(-1, feat_dim),
+                                  dim=0)[0]
                     temp.append(feat)
                 span_repr.append(temp)
 
@@ -406,7 +487,6 @@ class SynFueBERT(BertPreTrainedModel):
                 batch_rel_sample_masks3.append(torch.tensor(sample_masks3, dtype=torch.bool))
                 batch_pair_mask.append(torch.tensor(pair_mask, dtype=torch.bool))
 
-
         # stack
         device = self.rel_classifier.weight.device
         batch_relations = util.padded_stack(batch_relations).to(device)
@@ -420,15 +500,19 @@ class SynFueBERT(BertPreTrainedModel):
         batch_pair_mask = util.padded_stack(batch_pair_mask).to(device)
 
         return batch_relations, batch_rel_masks, batch_rel_sample_masks, \
-               batch_relations3, batch_rel_masks3, batch_rel_sample_masks3, batch_pair_mask, batch_span_repr, batch_rel_to_span
+               batch_relations3, batch_rel_masks3, batch_rel_sample_masks3, \
+               batch_pair_mask, batch_span_repr, batch_rel_to_span
 
     def get_span_repr(self, term_spans, term_types, token_repr):
         """
 
-        :param term_spans: [batch size, span_num, 2]
-        :param term_types: [batch size, span_num]
-        :param token_repr: [batch size, seq_len, seq_len, feat_dim]
-        :return: [batch size, span_num, span_num, feat_dim]
+        :param term_spans: [B, span_num, 2]
+        :param term_types: [B, span_num]
+        :param token_repr: [B, L, L, feat_dim]
+        :return:
+            batch_span_repr: [B, span_num, span_num, feat_dim]
+            batch_mapping_list: B. It is used to store the correspondence between the index in span matrix (x1, x2)
+                                and the index in positive term span list (i1, i2).
         """
         batch_size = term_spans.size(0)
         feat_dim = token_repr.size(-1)
@@ -444,7 +528,9 @@ class SynFueBERT(BertPreTrainedModel):
             for x1, (i1, s1) in enumerate(zip(non_zero_indices, non_zero_spans)):
                 temp = []
                 for x2, (i2, s2) in enumerate(zip(non_zero_indices, non_zero_spans)):
-                    feat = torch.max(token_repr[i, s1[0]: s1[-1]+1, s2[0]:s2[-1]+1, :].contiguous().view(-1, feat_dim), dim=0)[0]
+                    feat = \
+                        torch.max(token_repr[i, s1[0]: s1[-1] + 1, s2[0]:s2[-1] + 1, :].contiguous().view(-1, feat_dim),
+                                  dim=0)[0]
                     temp.append(feat)
                     mapping_list.append([[i1, i2], [x1, x2]])
 
@@ -456,6 +542,29 @@ class SynFueBERT(BertPreTrainedModel):
         batch_span_repr = util.padded_stack(batch_span_repr).to(device)
 
         return batch_span_repr, batch_mapping_list
+
+    def _bert_encoder(self, input_ids, pieces2word):
+        """
+
+        :param input_ids: [B, L'],  L' not equal L
+        :param pieces2word: [B, L, L']
+        :return:
+            word_reps: [B, L, H]
+            pooler_output: [B, H]
+        """
+        # sequence_output, pooled_output = self.bert(input_ids)
+        bert_output = self.bert(input_ids=input_ids, attention_mask=input_ids.ne(0).float())
+        sequence_output, pooler_output = bert_output[0], bert_output[1]
+        bert_embs = self.bert_dropout(sequence_output)
+
+        length = pieces2word.size(1)
+        min_value = torch.min(bert_embs).item()
+
+        # Max pooling word representations from pieces
+        _bert_embs = bert_embs.unsqueeze(1).expand(-1, length, -1, -1)
+        _bert_embs = torch.masked_fill(_bert_embs, pieces2word.eq(0).unsqueeze(-1), min_value)
+        word_reps, _ = torch.max(_bert_embs, dim=2)
+        return word_reps, pooler_output
 
     def forward(self, *args, evaluate=False, **kwargs):
         if not evaluate:

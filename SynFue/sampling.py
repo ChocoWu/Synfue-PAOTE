@@ -7,15 +7,23 @@ from SynFue import util
 
 def create_train_sample(doc, neg_term_count: int, neg_rel_count: int, max_span_size: int, rel_type_count: int):
     encodings = doc.encoding
-    token_count = len(doc.tokens)
-    context_size = len(encodings)
+    token_count = len(doc.tokens)  # the size of tokens in a document, NOT INCLUDE [CLS] AND [SEP]
+    context_size = len(
+        encodings)  # the size of sub-tokens in a document after WordPiece Tokenizer, include [CLS] AND [SEP]
+
+    pieces2word = torch.zeros((token_count, context_size), dtype=torch.bool)
+    start = 0
+    for i, token in enumerate(doc.tokens):
+        pieces = list(range(token.sub_token_start, token.sub_token_end))
+        pieces2word[i, pieces[0]: pieces[-1] + 1] = 1
+        start += len(pieces)
 
     # positive terms
     pos_term_spans, pos_term_types, pos_term_masks, pos_term_sizes = [], [], [], []
     for e in doc.terms:
         pos_term_spans.append(e.span)
         pos_term_types.append(e.term_type.index)
-        pos_term_masks.append(create_term_mask(*e.span, context_size))
+        pos_term_masks.append(create_term_mask(*e.span, token_count))
         pos_term_sizes.append(len(e.tokens))
 
     # positive relations
@@ -27,12 +35,12 @@ def create_train_sample(doc, neg_term_count: int, neg_rel_count: int, max_span_s
         pos_rels.append((pos_term_spans.index(s1), pos_term_spans.index(s2)))
         pos_rel_spans.append((s1, s2))
         pos_rel_types.append(rel.relation_type)
-        pos_rel_masks.append(create_rel_mask(s1, s2, context_size))
+        pos_rel_masks.append(create_rel_mask(s1, s2, token_count))
 
     def is_in_relation(head, tail, relations):
-        for rel in relations:
-            s1, s2 = rel.head_term, rel.tail_term
-            if s1 == head and s2 == tail:
+        for _rel in relations:
+            _s1, _s2 = _rel.head_term.span, _rel.tail_term.span
+            if (_s1 == head and _s2 == tail) or (_s1 == tail and _s2 == head):
                 return 1
         return 0
 
@@ -41,14 +49,13 @@ def create_train_sample(doc, neg_term_count: int, neg_rel_count: int, max_span_s
         x1, x2 = pos_term_spans.index(s1.span), pos_term_spans.index(s2.span)
         t_p_rels3 = []
         t_p_rels3_mask = []
-
         t_p_rel_span3 = []
-        for idx, e in enumerate(doc.terms):
+        for idx, _term_span in enumerate(pos_term_spans):
             if idx != x1 and idx != x2:
-                if is_in_relation(s1, e, doc.relations) or is_in_relation(s2, e, doc.relations) or is_in_relation(e, s1, doc.relations) or is_in_relation(e, s2, doc.relations):
+                if is_in_relation(s1, _term_span, doc.relations) or is_in_relation(s2, _term_span, doc.relations):
                     t_p_rels3.append((x1, x2, idx))
-                    t_p_rels3_mask.append(create_rel_mask3(s1.span, s2.span, e.span, context_size))
-                    t_p_rel_span3.append((s1.span, s2.span, e.span))
+                    t_p_rels3_mask.append(create_rel_mask3(s1.span, s2.span, _term_span, token_count))
+                    t_p_rel_span3.append((s1.span, s2.span, _term_span))
                     # t_p_rel_types3.append(1)
         if len(t_p_rels3) > 0:
             pos_rels3.append(t_p_rels3)
@@ -58,7 +65,7 @@ def create_train_sample(doc, neg_term_count: int, neg_rel_count: int, max_span_s
             # pos_rel_types3.append(t_p_rel_types3)
         else:
             pos_rels3.append([(x1, x2, 0)])
-            pos_rel_masks3.append([(create_rel_mask3(s1.span, s2.span, (0, 0), context_size))])
+            pos_rel_masks3.append([(create_rel_mask3(s1.span, s2.span, (0, 0), token_count))])
             pos_pair_mask.append(0)
 
     assert len(pos_rels) == len(pos_rels3) == len(pos_pair_mask)
@@ -74,10 +81,10 @@ def create_train_sample(doc, neg_term_count: int, neg_rel_count: int, max_span_s
 
     # sample negative terms
     neg_term_samples = random.sample(list(zip(neg_term_spans, neg_term_sizes)),
-                                       min(len(neg_term_spans), neg_term_count))
+                                     min(len(neg_term_spans), neg_term_count))
     neg_term_spans, neg_term_sizes = zip(*neg_term_samples) if neg_term_samples else ([], [])
 
-    neg_term_masks = [create_term_mask(*span, context_size) for span in neg_term_spans]
+    neg_term_masks = [create_term_mask(*span, token_count) for span in neg_term_spans]
     neg_term_types = [0] * len(neg_term_spans)
 
     # negative relations
@@ -115,16 +122,19 @@ def create_train_sample(doc, neg_term_count: int, neg_rel_count: int, max_span_s
 
     assert len(neg_rel_spans) == len(neg_rel_spans3) == len(neg_pair_mask)
 
-    neg_rel_spans_samples = random.sample(list(zip(neg_rel_spans, neg_rel_spans3, neg_pair_mask)), min(len(neg_rel_spans), neg_rel_count))
-    neg_rel_spans, neg_rel_spans3, neg_pair_mask = zip(*neg_rel_spans_samples) if neg_rel_spans_samples else ([], [], [])
+    neg_rel_spans_samples = random.sample(list(zip(neg_rel_spans, neg_rel_spans3, neg_pair_mask)),
+                                          min(len(neg_rel_spans), neg_rel_count))
+    neg_rel_spans, neg_rel_spans3, neg_pair_mask = zip(*neg_rel_spans_samples) if neg_rel_spans_samples else (
+    [], [], [])
 
     neg_rels = [(pos_term_spans.index(s1), pos_term_spans.index(s2)) for s1, s2 in neg_rel_spans]
-    neg_rels3 = [[(pos_term_spans.index(s1), pos_term_spans.index(s2), pos_term_spans.index(s3)) for s1, s2, s3 in x] for x in neg_rel_spans3]
+    neg_rels3 = [[(pos_term_spans.index(s1), pos_term_spans.index(s2), pos_term_spans.index(s3)) for s1, s2, s3 in x]
+                 for x in neg_rel_spans3]
 
     assert len(neg_rels3) == len(neg_rel_spans3) == len(neg_pair_mask)
 
-    neg_rel_masks = [create_rel_mask(*spans, context_size) for spans in neg_rel_spans]
-    neg_rel_masks3 = [[create_rel_mask3(*sps, context_size) for sps in spans] for spans in neg_rel_spans3]
+    neg_rel_masks = [create_rel_mask(*spans, token_count) for spans in neg_rel_spans]
+    neg_rel_masks3 = [[create_rel_mask3(*sps, token_count) for sps in spans] for spans in neg_rel_spans3]
     neg_rel_types = [0] * len(neg_rel_spans)
     # neg_rel_types3 = [0] * len(neg_rel_spans3)
 
@@ -152,7 +162,6 @@ def create_train_sample(doc, neg_term_count: int, neg_rel_count: int, max_span_s
         print(len(pair_mask))
 
     encodings = torch.tensor(encodings, dtype=torch.long)
-
     # masking of tokens
     context_masks = torch.ones(context_size, dtype=torch.bool)
 
@@ -169,7 +178,7 @@ def create_train_sample(doc, neg_term_count: int, neg_rel_count: int, max_span_s
     else:
         # corner case handling (no pos/neg terms)
         term_types = torch.zeros([1], dtype=torch.long)
-        term_masks = torch.zeros([1, context_size], dtype=torch.bool)
+        term_masks = torch.zeros([1, token_count], dtype=torch.bool)
         term_sizes = torch.zeros([1], dtype=torch.long)
         term_sample_masks = torch.zeros([1], dtype=torch.bool)
         term_spans = torch.tensor([1, 2], dtype=torch.long)
@@ -183,7 +192,7 @@ def create_train_sample(doc, neg_term_count: int, neg_rel_count: int, max_span_s
         # corner case handling (no pos/neg relations)
         rels = torch.zeros([1, 2], dtype=torch.long)
         rel_types = torch.zeros([1], dtype=torch.long)
-        rel_masks = torch.zeros([1, context_size], dtype=torch.bool)
+        rel_masks = torch.zeros([1, token_count], dtype=torch.bool)
         rel_sample_masks = torch.zeros([1], dtype=torch.bool)
 
     if rels3:
@@ -202,7 +211,7 @@ def create_train_sample(doc, neg_term_count: int, neg_rel_count: int, max_span_s
         pair_mask = torch.tensor(pair_mask, dtype=torch.bool)
     else:
         rels3 = torch.zeros([1, 3], dtype=torch.long)
-        rel_masks3 = torch.zeros([1, context_size], dtype=torch.bool)
+        rel_masks3 = torch.zeros([1, token_count], dtype=torch.bool)
         rel_sample_masks3 = torch.zeros([1], dtype=torch.bool)
         pair_mask = torch.tensor(pair_mask, dtype=torch.bool)
 
@@ -214,7 +223,7 @@ def create_train_sample(doc, neg_term_count: int, neg_rel_count: int, max_span_s
     simple_graph = None
     graph = None
     try:
-        simple_graph = torch.tensor(get_simple_graph(context_size, doc.dep), dtype=torch.long)  # only the relation
+        simple_graph = torch.tensor(get_simple_graph(token_count, doc.dep), dtype=torch.long)  # only the relation
     except:
         print(context_size)
         print(token_count)
@@ -222,7 +231,7 @@ def create_train_sample(doc, neg_term_count: int, neg_rel_count: int, max_span_s
         print(doc.dep)
         print(doc.dep_label_indices)
     try:
-        graph = torch.tensor(get_graph(context_size, doc.dep, doc.dep_label_indices),
+        graph = torch.tensor(get_graph(token_count, doc.dep, doc.dep_label_indices),
                              dtype=torch.long)  # relation and the type of relation
     except:
         print(context_size)
@@ -231,7 +240,7 @@ def create_train_sample(doc, neg_term_count: int, neg_rel_count: int, max_span_s
         print(doc.dep)
         print(doc.dep_label_indices)
 
-    pos = torch.tensor(get_pos(context_size, doc.pos_indices), dtype=torch.long)
+    pos = torch.tensor(get_pos(token_count, doc.pos_indices), dtype=torch.long)
 
     return dict(encodings=encodings, context_masks=context_masks, term_masks=term_masks,
                 term_sizes=term_sizes, term_types=term_types, term_spans=term_spans,
@@ -239,13 +248,20 @@ def create_train_sample(doc, neg_term_count: int, neg_rel_count: int, max_span_s
                 rels3=rels3, rel_sample_masks3=rel_sample_masks3, rel_masks3=rel_masks3,
                 pair_mask=pair_mask,
                 term_sample_masks=term_sample_masks, rel_sample_masks=rel_sample_masks,
-                simple_graph=simple_graph, graph=graph, pos=pos)
+                simple_graph=simple_graph, graph=graph, pos=pos, pieces2word=pieces2word)
 
 
 def create_eval_sample(doc, max_span_size: int):
     encodings = doc.encoding
     token_count = len(doc.tokens)
     context_size = len(encodings)
+
+    pieces2word = torch.zeros((token_count, context_size), dtype=torch.bool)
+    start = 0
+    for i, token in enumerate(doc.tokens):
+        pieces = list(range(token.sub_token_start, token.sub_token_end))
+        pieces2word[i, pieces[0]: pieces[-1] + 1] = 1
+        start += len(pieces)
 
     # create term candidates
     term_spans = []
@@ -256,18 +272,19 @@ def create_eval_sample(doc, max_span_size: int):
         for i in range(0, (token_count - size) + 1):
             span = doc.tokens[i:i + size].span
             term_spans.append(span)
-            term_masks.append(create_term_mask(*span, context_size))
+            term_masks.append(create_term_mask(*span, token_count))
             term_sizes.append(size)
 
     # create tensors
     # token indices
-    _encoding = encodings
-    encodings = torch.zeros(context_size, dtype=torch.long)
-    encodings[:len(_encoding)] = torch.tensor(_encoding, dtype=torch.long)
+    # _encoding = encodings
+    # encodings = torch.zeros(context_size, dtype=torch.long)
+    # encodings[:len(_encoding)] = torch.tensor(_encoding, dtype=torch.long)
+    encodings = torch.tensor(encodings, dtype=torch.long)
 
     # masking of tokens
-    context_masks = torch.zeros(context_size, dtype=torch.bool)
-    context_masks[:len(_encoding)] = 1
+    context_masks = torch.ones(context_size, dtype=torch.bool)
+    # context_masks[:len(_encoding)] = 1
 
     # terms
     if term_masks:
@@ -281,19 +298,19 @@ def create_eval_sample(doc, max_span_size: int):
         term_sample_masks = torch.tensor([1] * term_masks.shape[0], dtype=torch.bool)
     else:
         # corner case handling (no terms)
-        term_masks = torch.zeros([1, context_size], dtype=torch.bool)
+        term_masks = torch.zeros([1, token_count], dtype=torch.bool)
         term_sizes = torch.zeros([1], dtype=torch.long)
         term_spans = torch.zeros([1, 2], dtype=torch.long)
         term_sample_masks = torch.zeros([1], dtype=torch.bool)
 
-    simple_graph = torch.tensor(get_simple_graph(context_size, doc.dep), dtype=torch.long)  # only the relation
-    graph = torch.tensor(get_graph(context_size, doc.dep, doc.dep_label_indices),
+    simple_graph = torch.tensor(get_simple_graph(token_count, doc.dep), dtype=torch.long)  # only the relation
+    graph = torch.tensor(get_graph(token_count, doc.dep, doc.dep_label_indices),
                          dtype=torch.long)  # relation and the type of relation
-    pos = torch.tensor(get_pos(context_size, doc.pos_indices), dtype=torch.long)
+    pos = torch.tensor(get_pos(token_count, doc.pos_indices), dtype=torch.long)
 
     return dict(encodings=encodings, context_masks=context_masks, term_masks=term_masks,
                 term_sizes=term_sizes, term_spans=term_spans, term_sample_masks=term_sample_masks,
-                simple_graph=simple_graph, graph=graph, pos=pos)
+                simple_graph=simple_graph, graph=graph, pos=pos, pieces2word=pieces2word)
 
 
 def create_term_mask(start, end, context_size):
@@ -332,29 +349,48 @@ def collate_fn_padding(batch):
 
 
 def get_graph(seq_len, feature_data, feature2id):
+    """
+    To create a table t_{i,j} in T. t_{i,j} = r, r is the dependency relation label between word i and word j.
+    :param seq_len: token
+    :param feature_data: dependency head. Specifically, '0' represents the head word is ROOT
+    :param feature2id: dependency label indices
+    :return:
+    """
+    assert len(feature2id) == len(feature_data) == seq_len
     ret = [[0] * seq_len for _ in range(seq_len)]
     for i, item in enumerate(feature_data):
-        if int(item) > seq_len-1 or int(item) == 0:
+        # the head word is ROOT, so this token only has a self-loop edge
+        if int(item) == 0:
+            ret[i][i] = 1
             continue
-        ret[i + 1][int(item) - 1] = feature2id[i] + 2
-        ret[int(item) - 1][i + 1] = feature2id[i] + 2
-        ret[i + 1][i + 1] = 1
+        ret[i][int(item) - 1] = feature2id[i]
+        ret[int(item) - 1][i] = feature2id[i]
+        ret[i][i] = 1
     return ret
 
 
 def get_simple_graph(seq_len, feature_data):
+    """
+    To create a table t_{i,j} in T. t_{i,j} = 1, which means there is an edge between the word i and word j.
+    :param seq_len: token
+    :param feature_data: dependency head. Specifically, '0' represents the head word is ROOT
+    :return:
+    """
+    assert len(feature_data) == seq_len
     ret = [[0] * seq_len for _ in range(seq_len)]
     for i, item in enumerate(feature_data):
-        if int(item) > seq_len-1:
+        if int(item) == 0:
+            ret[i][i] = 1
             continue
-        ret[i + 1][int(item) - 1] = 1
-        ret[int(item) - 1][i + 1] = 1
-        ret[i + 1][i + 1] = 1
+        ret[i][int(item) - 1] = 1
+        ret[int(item) - 1][i] = 1
+        ret[i][i] = 1
     return ret
 
 
 def get_pos(seq_len, pos_indices):
+    assert len(pos_indices) == seq_len
     ret = [0] * seq_len
     for i, item in enumerate(pos_indices):
-        ret[i + 1] = pos_indices[i] + 1
+        ret[i] = pos_indices[i]
     return ret

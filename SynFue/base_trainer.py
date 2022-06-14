@@ -30,7 +30,7 @@ class BaseTrainer:
         util.create_directories_dir(self._log_path)
 
         if hasattr(args, 'save_path'):
-            self._save_path = os.path.join(self.args.save_path, self.args.label, name)
+            self._save_path = os.path.join(self.args.save_path, self.args.label)
             util.create_directories_dir(self._save_path)
 
         self._log_paths = dict()
@@ -112,26 +112,30 @@ class BaseTrainer:
         if extra:
             extra_state.update(extra)
 
-        if save_as_best:
-            dir_path = os.path.join(save_path, '%s_best' % name)
-        else:
-            dir_name = '%s_%s' % (name, iteration) if include_iteration else name
-            dir_path = os.path.join(save_path, dir_name)
+        # if save_as_best:
+        #     dir_path = os.path.join(save_path, '%s_best' % name)
+        # else:
+        #     dir_name = '%s_%s' % (name, iteration) if include_iteration else name
+        #     dir_path = os.path.join(save_path, dir_name)
 
-        util.create_directories_dir(dir_path)
+        util.create_directories_dir(save_path)
 
         # save model
         if isinstance(model, DataParallel):
-            model.module.save_pretrained(dir_path)
+            model.module.save_pretrained(save_path)
         else:
-            model.save_pretrained(dir_path)
+            model.save_pretrained(save_path)
 
         # save vocabulary
-        tokenizer.save_pretrained(dir_path)
+        tokenizer.save_pretrained(save_path)
 
         # save extra
-        state_path = os.path.join(dir_path, 'extra.state')
+        state_path = os.path.join(save_path, 'extra.state')
         torch.save(extra_state, state_path)
+
+    # def _load_model(self, save_path: str):
+    #
+    #     model = torch.load()
 
     def _get_lr(self, optimizer):
         lrs = []

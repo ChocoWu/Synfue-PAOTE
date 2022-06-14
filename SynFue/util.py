@@ -217,9 +217,9 @@ def check_version(config, model_class, model_path):
         config_dict = config.to_dict()
 
         # version check
-        loaded_version = config_dict.get('synfue_version', '1.0')
+        loaded_version = config_dict.get('spert_version', '1.2')
         if 'rel_classifier.weight' in state_dict and loaded_version != model_class.VERSION:
-            msg = ("Current Synfue version (%s) does not match the version of the loaded model (%s). "
+            msg = ("Current SpERT version (%s) does not match the version of the loaded model (%s). "
                    % (model_class.VERSION, loaded_version))
             msg += "Use the code matching your version or train a new model."
             raise Exception(msg)
