@@ -21,7 +21,7 @@ print('seed:', config['random_seed'])
 normalize_digits = config['normalize_digits']
 lower_case = config['lower_case']
 
-depparser = CoreNLPDependencyParser(url='http://172.28.6.42:9000')
+depparser = CoreNLPDependencyParser(url='http://127.0.0.1:9000')
 
 
 def build_vocab(data_list, file_path):
