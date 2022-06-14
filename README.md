@@ -12,19 +12,19 @@ Orignal data comes from [TOWE](https://github.com/NJUNLP/TOWE/tree/master/data).
 
 ### Preprocessing
 We need to obtain the dependency sturcture and POS tags for each data, and save as json format.
-Pay attention to the file path and modify as needed
+Pay attention to the file path and modify as needed.
 
 #### Get Dependency and POS
 To parse the dependency structure and POS tags, we employ the [CoreNLP](https://stanfordnlp.github.io/CoreNLP/) provided by stanfordnlp.
-So please download relavant files first.
+So please download relavant files first and put it in `data/datasets/orignal`.
+We use the NLTK package to obtain the dependency and POS parsing, so we need to modify the code as follows in `process.py` line 24: 
 ```
-  cd data/datasets/orignal 
-  python preprocess.py
+depparser = CoreNLPDependencyParser(url='http://127.0.0.1:9000')
 ```
+The url is set based on the real senerois.
 
 #### Save
 ```
-  cd data/datasets/towe 
   python preprocess.py
 ```
 
@@ -39,7 +39,7 @@ We use embedding bert-cased by [bert-base-cased](https://huggingface.co/bert-bas
 ```
 ### Test
 ```
-  python synfue.py test --config configs/16res_test.conf
+  python synfue.py eval --config configs/16res_eval.conf
 ```
 
 ## Note
