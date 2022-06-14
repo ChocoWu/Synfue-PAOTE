@@ -1,0 +1,15 @@
+ori_data_dir: 'original/'
+new_data_dir: 'towe/'
+
+vocab_dir: 'data/vocab'
+token_vocab_file: 'token_vocab.txt'
+char_vocab_file: 'char_vocab.txt'
+pos_vocab_file: 'pos_vocab.txt'
+dep_type_vocab_file: 'dep_type_vocab.txt'
+prd_type_vocab_file: 'prd_type_vocab.txt'
+role_type_vocab_file: 'role_type_vocab.txt'
+action_vocab_file: 'action_vocab.txt'
+
+normalize_digits: false
+lower_case: True
+random_seed: 2942435
