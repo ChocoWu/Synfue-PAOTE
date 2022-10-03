@@ -1,5 +1,5 @@
 # Syntax fusion Encoder for the PAOTE task (Synfue)
-This repository implements the dependency parser described in the paper [Learn from Syntax: Improving Pair-wise Aspect and Opinion Terms Extraction with Rich Syntactic Knowledge]()
+This repository implements the method described in the paper [Learn from Syntax: Improving Pair-wise Aspect and Opinion Terms Extraction with Rich Syntactic Knowledge](https://www.ijcai.org/proceedings/2021/0545.pdf)
 
 
 ## Prerequisite
